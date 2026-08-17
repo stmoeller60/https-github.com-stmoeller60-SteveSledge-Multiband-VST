@@ -15,17 +15,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout SteveSledgeCompressorAudioPr
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
     layout.add (std::make_unique<APF> (juce::ParameterID { "input", 1 }, "Input Gain",
-                                      Range { 0.0f, 20.0f, 0.1f }, 20.0f, "dB"));
+                                      Range { -20.0f, 20.0f, 0.1f }, 0.0f, "dB"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "threshold", 1 }, "Threshold",
                                       Range { -40.0f, -15.0f, 0.1f }, -29.0f, "dBFS"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "ratio", 1 }, "Ratio",
                                       Range { 1.0f, 10.0f, 0.1f }, 4.0f, ":1"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "speed", 1 }, "Speed",
-                                      Range { 0.5f, 2.0f, 0.01f }, 1.0f, "x"));
+                                      Range { 0.1f, 10.0f, 0.01f }, 1.0f, "x"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "makeup", 1 }, "Makeup",
                                       Range { 0.0f, 20.0f, 0.1f }, 15.0f, "dB"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "ceiling", 1 }, "Limiter Ceiling",
-                                      Range { -6.0f, -0.1f, 0.1f }, -0.1f, "dBFS"));
+                                      Range { -20.0f, -0.1f, 0.1f }, -0.1f, "dBFS"));
     return layout;
 }
 
