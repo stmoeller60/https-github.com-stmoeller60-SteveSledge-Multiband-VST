@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.22)
-project(SteveSledgeCompressor VERSION 1.1.0 LANGUAGES C CXX)
+
+# Use the static MSVC runtime (/MT for Release, /MTd for Debug).
+# CMP0091 must be NEW before project() enables MSVC languages.
+cmake_policy(SET CMP0091 NEW)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+project(SteveSledgeCompressor VERSION 1.1.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
