@@ -7,7 +7,8 @@ on:
 
 jobs:
   build-windows-vst3:
-    runs-on: windows-latest
+    runs-on: windows-2022
+
     steps:
       - name: Enable long paths
         shell: pwsh
@@ -16,24 +17,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure
+      - name: Configure plugin with VS2022
         shell: pwsh
-        run: cmake -S . -B D:/b -A x64 -DFETCHCONTENT_BASE_DIR=D:/deps
+        run: cmake -S . -B D:/b -G "Visual Studio 17 2022" -A x64 -DFETCHCONTENT_BASE_DIR=D:/deps
 
-      - name: Build Release
+      - name: Build plugin Release
         shell: pwsh
         run: cmake --build D:/b --config Release --target SteveSledgeCompressor_VST3 --parallel
 
-      - name: Stage VST3 artifact
+      - name: Clone Steinberg VST3 SDK
+        shell: pwsh
+        run: git clone --recursive --depth 1 https://github.com/steinbergmedia/vst3sdk.git D:/vst3sdk
+
+      - name: Configure Steinberg validator with VS2022
+        shell: pwsh
+        run: cmake -S D:/vst3sdk -B D:/vst3build -G "Visual Studio 17 2022" -A x64 -DSMTG_CREATE_PLUGIN_LINK=0
+
+      - name: Build Steinberg validator
+        shell: pwsh
+        run: cmake --build D:/vst3build --config Release --target validator --parallel
+
+      - name: Locate and run Steinberg validator
+        shell: pwsh
+        run: |
+          $plugin = "D:/b/SteveSledgeCompressor_artefacts/Release/VST3/Steve Sledge Multiband Compressor.vst3"
+          $validator = Get-ChildItem -Path D:/vst3build -Recurse -Filter validator.exe | Select-Object -First 1
+          if (-not $validator) { throw "Steinberg validator.exe not found" }
+          Write-Host "Validator: $($validator.FullName)"
+          Write-Host "Plugin: $plugin"
+          & $validator.FullName "$plugin"
+          if ($LASTEXITCODE -ne 0) { throw "Steinberg validator failed with exit code $LASTEXITCODE" }
+
+      - name: Stage VST3 bundle only
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Copy-Item -Recurse -Force "D:/b/SteveSledgeCompressor_artefacts/Release/VST3/*" "artifacts/"
+          Copy-Item -Recurse -Force "D:/b/SteveSledgeCompressor_artefacts/Release/VST3/Steve Sledge Multiband Compressor.vst3" "artifacts/"
           Get-ChildItem -Path artifacts -Recurse | ForEach-Object { Write-Host $_.FullName }
 
-      - name: Upload Windows VST3
+      - name: Upload validated Windows VST3
         uses: actions/upload-artifact@v4
         with:
-          name: SteveSledge-Multiband-Compressor-Windows-x64-VST3
-          path: artifacts/**
+          name: SteveSledge-Multiband-Compressor-Windows-x64-VST3-validated
+          path: artifacts/Steve Sledge Multiband Compressor.vst3/**
           if-no-files-found: error
