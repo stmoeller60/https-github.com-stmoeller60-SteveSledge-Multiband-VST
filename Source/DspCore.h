@@ -9,12 +9,11 @@ class SteveSledgeDspCore
 public:
     struct Params
     {
-        float inputGainDb = 20.0f;
+        float inputGainDb = 0.0f;
         float thresholdDb = -29.0f;
         float ratio = 4.0f;
         float speed = 1.0f;
         float makeupDb = 15.0f;
-        float ceilingDb = -0.1f;
     };
 
     void prepare (double newSampleRate)
@@ -28,7 +27,6 @@ public:
     {
         splitter.reset();
         for (auto& b : bandState) b = {};
-        limiterGain = 1.0f;
     }
 
     float processSample (float x, const Params& p)
@@ -42,9 +40,6 @@ public:
         constexpr float grFullDb = 10.0f;
         constexpr float persistExp = 4.0f;
         constexpr float balMs = 20.0f;
-        constexpr float limFastMs = 18.0f;
-        constexpr float limSlowMs = 80.0f;
-        constexpr float limDeepDb = 6.0f;
 
         static constexpr std::array<float, 4> att0 { 2.5f, 2.975f, 1.275f, 0.425f };
         static constexpr std::array<float, 4> rel0 { 10.0f, 11.9f, 5.1f, 1.7f };
@@ -61,15 +56,13 @@ public:
         std::array<float, 4> eout {};
 
         const float balA = coeffMs (balMs);
-        const float speed = juce::jlimit (0.5f, 2.0f, p.speed);
+        const float speed = juce::jlimit (0.1f, 10.0f, p.speed);
 
         for (size_t k = 0; k < 4; ++k)
         {
             auto& st = bandState[k];
             const float originalBand = bands[k] / drive;
 
-            // p^4 persistence detector. This mirrors MASTER_REFERENCE_v1_0:
-            // detector sees (band/drive) and internally applies the fixed +6 dB drive.
             const float qdet = square (originalBand * drive);
             const float ae = coeffMs (detAttackMs / speed);
             st.persistEnv = ae * st.persistEnv + (1.0f - ae) * qdet;
@@ -84,7 +77,6 @@ public:
             st.persistState = ap * st.persistState + (1.0f - ap) * u;
             const float releaseFactor = 1.0f + 9.0f * std::pow (juce::jlimit (0.0f, 1.0f, st.persistState), persistExp);
 
-            // Per-band compressor.
             const float attackMs = att0[k] / speed;
             const float releaseMs = rel0[k] * releaseFactor / speed;
             const float aa = coeffMs (attackMs);
@@ -100,7 +92,6 @@ public:
             st.gainDb = gainA * st.gainDb + (1.0f - gainA) * tgt;
             comp[k] = bands[k] * juce::Decibels::decibelsToGain (st.gainDb) / drive;
 
-            // 20 ms energy traces for spectral balance correction.
             const float qi = square (originalBand);
             const float qo = square (comp[k]);
             if (! st.energyInitialised)
@@ -117,7 +108,6 @@ public:
             eout[k] = st.eout;
         }
 
-        // Band 3 (index 2) is the relative balance reference.
         for (size_t k = 0; k < 4; ++k)
         {
             const float raw = (10.0f * std::log10 (std::max (bandState[k].ein, eps))
@@ -140,26 +130,12 @@ public:
         for (size_t k = 0; k < 4; ++k)
             sum += comp[k] * balanceGain[k] * common * makeup;
 
-        // Linked sum limiter: same trajectory concept as the mono Python reference.
-        const float ceiling = juce::Decibels::decibelsToGain (p.ceilingDb);
-        const float pk = std::abs (sum);
-        const float req = pk <= ceiling ? 1.0f : ceiling / std::max (pk, 1.0e-20f);
-        if (req < limiterGain)
-        {
-            limiterGain = req; // immediate peak capture
-        }
-        else
-        {
-            const float gr = -20.0f * std::log10 (std::max (limiterGain, 1.0e-12f));
-            float lu = juce::jlimit (0.0f, 1.0f, gr / limDeepDb);
-            lu = lu * lu * (3.0f - 2.0f * lu);
-            const float releaseMs = limFastMs + (limSlowMs - limFastMs) * lu;
-            const float a = coeffMs (releaseMs / speed);
-            limiterGain = a * limiterGain + (1.0f - a);
-            if (limiterGain > req) limiterGain = req;
-        }
+        return sum;
+    }
 
-        return sum * limiterGain;
+    float getBandGainReductionDb (size_t band) const
+    {
+        return band < bandState.size() ? std::max (0.0f, -bandState[band].gainDb) : 0.0f;
     }
 
 private:
@@ -244,5 +220,4 @@ private:
     double fs = 48000.0;
     Splitter splitter;
     std::array<BandState, 4> bandState {};
-    float limiterGain = 1.0f;
 };
