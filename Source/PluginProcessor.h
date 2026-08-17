@@ -44,6 +44,7 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void prepareLimiter (double sampleRate);
     void processLimiter (juce::AudioBuffer<float>& buffer, float ceilingDb);
+    void applyOutputGain (juce::AudioBuffer<float>& buffer, float gainDb);
 
     std::array<SteveSledgeDspCore, 2> cores;
 
