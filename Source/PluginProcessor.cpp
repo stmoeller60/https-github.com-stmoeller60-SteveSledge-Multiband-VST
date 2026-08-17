@@ -114,23 +114,24 @@ void SteveSledgeCompressorAudioProcessor::processLimiter (juce::AudioBuffer<floa
             peak = std::max (peak, std::abs (x));
         }
 
+        const int readPos = (limiterPos + 1) % limiterBufferSize;
         const float requiredGain = peak > ceiling
             ? ceiling / std::max (peak, 1.0e-20f)
             : 1.0f;
 
         if (requiredGain < 1.0f)
         {
-            for (int d = 1; d <= lookaheadSamples; ++d)
+            for (int d = 0; d <= lookaheadSamples; ++d)
             {
                 const float phase = (float) d / (float) lookaheadSamples;
                 const float smooth = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * phase);
                 const float planned = 1.0f + (requiredGain - 1.0f) * smooth;
-                const int idx = (limiterPos + d) % limiterBufferSize;
+                const int idx = (readPos + d) % limiterBufferSize;
                 gainPlan[(size_t) idx] = std::min (gainPlan[(size_t) idx], planned);
             }
         }
 
-        const float target = gainPlan[(size_t) limiterPos];
+        const float target = gainPlan[(size_t) readPos];
         if (target < limiterGain)
             limiterGain = target;
         else
@@ -138,12 +139,11 @@ void SteveSledgeCompressorAudioProcessor::processLimiter (juce::AudioBuffer<floa
 
         for (int ch = 0; ch < channels; ++ch)
         {
-            const int readPos = (limiterPos + 1) % limiterBufferSize;
             const float delayed = delayBuffer[(size_t) ch][(size_t) readPos];
             buffer.setSample (ch, i, delayed * limiterGain);
         }
 
-        gainPlan[(size_t) limiterPos] = 1.0f;
+        gainPlan[(size_t) readPos] = 1.0f;
         limiterPos = (limiterPos + 1) % limiterBufferSize;
     }
 
