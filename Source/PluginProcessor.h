@@ -2,6 +2,9 @@
 
 #include <JuceHeader.h>
 #include "DspCore.h"
+#include <array>
+#include <atomic>
+#include <vector>
 
 class SteveSledgeCompressorAudioProcessor : public juce::AudioProcessor
 {
@@ -32,11 +35,30 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    float getBandMeterDb (int band) const;
+    float getLimiterMeterDb() const;
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    void prepareLimiter (double sampleRate);
+    void processLimiter (juce::AudioBuffer<float>& buffer, float ceilingDb);
+
     std::array<SteveSledgeDspCore, 2> cores;
+
+    static constexpr double lookaheadMs = 5.0;
+    static constexpr double limiterReleaseMs = 50.0;
+    int lookaheadSamples = 0;
+    int limiterBufferSize = 1;
+    int limiterPos = 0;
+    double currentSampleRate = 48000.0;
+    float limiterGain = 1.0f;
+    std::array<std::vector<float>, 2> delayBuffer;
+    std::vector<float> gainPlan;
+
+    std::array<std::atomic<float>, 4> bandMeterDb { 0.0f, 0.0f, 0.0f, 0.0f };
+    std::atomic<float> limiterMeterDb { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SteveSledgeCompressorAudioProcessor)
 };
