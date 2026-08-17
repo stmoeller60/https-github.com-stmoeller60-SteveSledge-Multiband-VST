@@ -9,25 +9,31 @@ jobs:
   build-windows-vst3:
     runs-on: windows-latest
     steps:
+      - name: Enable long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configure
         shell: pwsh
-        run: cmake -S . -B build -A x64
+        run: cmake -S . -B D:/b -A x64 -DFETCHCONTENT_BASE_DIR=D:/deps
 
       - name: Build Release
         shell: pwsh
-        run: cmake --build build --config Release --target SteveSledgeCompressor_VST3 --parallel
+        run: cmake --build D:/b --config Release --target SteveSledgeCompressor_VST3 --parallel
 
-      - name: Locate VST3
+      - name: Stage VST3 artifact
         shell: pwsh
         run: |
-          Get-ChildItem -Path build -Recurse -Filter "*.vst3" | ForEach-Object { Write-Host $_.FullName }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item -Recurse -Force "D:/b/SteveSledgeCompressor_artefacts/Release/VST3/*" "artifacts/"
+          Get-ChildItem -Path artifacts -Recurse | ForEach-Object { Write-Host $_.FullName }
 
       - name: Upload Windows VST3
         uses: actions/upload-artifact@v4
         with:
           name: SteveSledge-Multiband-Compressor-Windows-x64-VST3
-          path: build/SteveSledgeCompressor_artefacts/Release/VST3/**
+          path: artifacts/**
           if-no-files-found: error
