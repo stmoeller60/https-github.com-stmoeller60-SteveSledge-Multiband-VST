@@ -1,1 +1,1 @@
-# https-github.com-stmoeller60-SteveSledge-Multiband-VST
+ChatGPT VST Multiband Comprtessor mit Autobalance
