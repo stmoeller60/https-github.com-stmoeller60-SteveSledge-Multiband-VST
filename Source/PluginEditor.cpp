@@ -141,6 +141,11 @@ void SteveSledgeCompressorAudioProcessorEditor::paint (juce::Graphics& g)
     g.drawText ("Gain Reduction  |  four bands + limiter", 10, meterTop - 20, getWidth() - 20, 16,
                 juce::Justification::centred);
 
+    g.setColour (outputPeakDb > -0.1f ? juce::Colour (0xffff6666) : juce::Colour (0xffa9d9e8));
+    g.setFont (12.0f);
+    g.drawText ("Post-Master Peak: " + juce::String (outputPeakDb, 1) + " dBFS",
+                getWidth() - 260, meterTop - 20, 235, 16, juce::Justification::centredRight);
+
     g.setColour (juce::Colour (0xff8e949f));
     g.setFont (11.5f);
     if (simpleModeButton.getToggleState())
@@ -210,6 +215,7 @@ void SteveSledgeCompressorAudioProcessorEditor::timerCallback()
     for (int i = 0; i < 4; ++i)
         meterDb[(size_t) i] = processor.getBandMeterDb (i);
     meterDb[4] = processor.getLimiterMeterDb();
+    outputPeakDb = processor.getOutputPeakDb();
 
     const bool simple = simpleModeButton.getToggleState();
     if (simple != lastSimpleMode)
