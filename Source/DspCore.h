@@ -23,16 +23,19 @@ public:
     {
         fs = newSampleRate;
         reset();
-        splitter.prepare (fs, 250.0f, 800.0f, 2500.0f);
+        for (auto& s : splitters)
+            s.prepare (fs, 250.0f, 800.0f, 2500.0f);
     }
 
     void reset()
     {
-        splitter.reset();
+        for (auto& s : splitters) s.reset();
         for (auto& b : bandState) b = {};
     }
 
-    float processSample (float x, const Params& p)
+    // Processes one mono or stereo sample frame. Audio channels stay separate,
+    // but compressor detection, adaptive release and spectral balance are linked.
+    void processFrame (float& left, float& right, int channels, const Params& p)
     {
         constexpr float eps = 1.0e-10f;
         constexpr float driveDb = 6.0f;
@@ -47,30 +50,38 @@ public:
         static constexpr std::array<float, 4> att0 { 2.5f, 2.975f, 1.275f, 0.425f };
         static constexpr std::array<float, 4> rel0 { 10.0f, 11.9f, 5.1f, 3.0f };
 
-        splitter.setCrossovers (p.xover1Hz, p.xover2Hz, p.xover3Hz);
+        channels = juce::jlimit (1, 2, channels);
+        for (auto& s : splitters)
+            s.setCrossovers (p.xover1Hz, p.xover2Hz, p.xover3Hz);
 
         const float inputGain = juce::Decibels::decibelsToGain (p.inputGainDb);
         const float drive = juce::Decibels::decibelsToGain (driveDb);
-        const float driven = x * inputGain * drive;
 
-        std::array<float, 4> bands {};
-        splitter.process (driven, bands);
+        std::array<std::array<float, 4>, 2> bands {};
+        splitters[0].process (left * inputGain * drive, bands[0]);
+        if (channels > 1)
+            splitters[1].process (right * inputGain * drive, bands[1]);
 
-        std::array<float, 4> comp {};
+        std::array<std::array<float, 4>, 2> comp {};
         std::array<float, 4> balanceGain {};
         std::array<float, 4> eout {};
 
         const float balA = coeffMs (balMs);
         const float speed = juce::jlimit (0.1f, 10.0f, p.speed);
+        const float invChannels = 1.0f / (float) channels;
 
         for (size_t k = 0; k < 4; ++k)
         {
             auto& st = bandState[k];
-            const float originalBand = bands[k] / drive;
 
-            const float qdet = square (originalBand * drive);
+            // Stereo-linked detector: average channel energies, never audio L+R.
+            float qLinked = square (bands[0][k]);
+            if (channels > 1)
+                qLinked += square (bands[1][k]);
+            qLinked *= invChannels;
+
             const float ae = coeffMs (detAttackMs / speed);
-            st.persistEnv = ae * st.persistEnv + (1.0f - ae) * qdet;
+            st.persistEnv = ae * st.persistEnv + (1.0f - ae) * qLinked;
             const float levDet = 10.0f * std::log10 (std::max (st.persistEnv, eps));
             const float gm = levDet > p.thresholdDb
                                ? levDet - (p.thresholdDb + (levDet - p.thresholdDb) / p.ratio)
@@ -86,19 +97,32 @@ public:
             const float releaseMs = rel0[k] * releaseFactor / speed;
             const float aa = coeffMs (attackMs);
             const float ar = coeffMs (releaseMs);
-            const float q = square (bands[k]);
-            const float envA = q > st.compEnv ? aa : ar;
-            st.compEnv = envA * st.compEnv + (1.0f - envA) * q;
+            const float envA = qLinked > st.compEnv ? aa : ar;
+            st.compEnv = envA * st.compEnv + (1.0f - envA) * qLinked;
             const float lev = 10.0f * std::log10 (std::max (st.compEnv, eps));
             const float tgt = lev > p.thresholdDb
                                 ? (p.thresholdDb + (lev - p.thresholdDb) / p.ratio - lev)
                                 : 0.0f;
             const float gainA = tgt < st.gainDb ? aa : ar;
             st.gainDb = gainA * st.gainDb + (1.0f - gainA) * tgt;
-            comp[k] = bands[k] * juce::Decibels::decibelsToGain (st.gainDb) / drive;
 
-            const float qi = square (originalBand);
-            const float qo = square (comp[k]);
+            const float compGain = juce::Decibels::decibelsToGain (st.gainDb) / drive;
+            comp[0][k] = bands[0][k] * compGain;
+            if (channels > 1)
+                comp[1][k] = bands[1][k] * compGain;
+
+            // Stereo-linked auto-balance uses summed/averaged energies and therefore
+            // applies exactly the same spectral correction to L and R.
+            float qi = square (bands[0][k] / drive);
+            float qo = square (comp[0][k]);
+            if (channels > 1)
+            {
+                qi += square (bands[1][k] / drive);
+                qo += square (comp[1][k]);
+            }
+            qi *= invChannels;
+            qo *= invChannels;
+
             if (! st.energyInitialised)
             {
                 st.ein = qi;
@@ -131,11 +155,17 @@ public:
         const float common = std::sqrt (num / std::max (den, eps));
         const float makeup = juce::Decibels::decibelsToGain (p.makeupDb);
 
-        float sum = 0.0f;
+        float sumL = 0.0f, sumR = 0.0f;
         for (size_t k = 0; k < 4; ++k)
-            sum += comp[k] * balanceGain[k] * common * makeup;
+        {
+            const float g = balanceGain[k] * common * makeup;
+            sumL += comp[0][k] * g;
+            if (channels > 1)
+                sumR += comp[1][k] * g;
+        }
 
-        return sum;
+        left = sumL;
+        if (channels > 1) right = sumR;
     }
 
     float getBandGainReductionDb (size_t band) const
@@ -203,7 +233,6 @@ private:
         }
         void setCrossovers (float low, float mid, float high)
         {
-            // Keep the three crossovers ordered even during automation.
             low = juce::jlimit (60.0f, 700.0f, low);
             mid = juce::jlimit (low + 40.0f, 1800.0f, mid);
             high = juce::jlimit (mid + 100.0f, 7000.0f, high);
@@ -260,6 +289,6 @@ private:
     static float square (float x) { return x * x; }
 
     double fs = 48000.0;
-    Splitter splitter;
+    std::array<Splitter, 2> splitters;
     std::array<BandState, 4> bandState {};
 };
