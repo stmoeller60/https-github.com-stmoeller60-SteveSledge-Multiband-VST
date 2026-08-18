@@ -18,20 +18,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout SteveSledgeCompressorAudioPr
     using Range = juce::NormalisableRange<float>;
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    // Simple / musical control layer. Defaults to Advanced so existing settings remain unchanged.
+    // Musical/Simple layer.
     layout.add (std::make_unique<APB> (juce::ParameterID { "simple", 1 }, "Simple Mode", false));
     layout.add (std::make_unique<APF> (juce::ParameterID { "comp", 1 }, "Comp",
-                                      Range { 0.0f, 100.0f, 0.1f }, 50.0f, "%"));
+                                      Range { 0.0f, 10.0f, 0.1f }, 5.0f, ""));
     layout.add (std::make_unique<APF> (juce::ParameterID { "attack", 1 }, "Attack",
-                                      Range { 0.0f, 100.0f, 0.1f }, 50.0f, "%"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "level", 1 }, "Level",
+                                      Range { 0.0f, 10.0f, 0.1f }, 5.0f, ""));
+
+    // Kept for backwards-compatible state loading; no longer shown or used.
+    layout.add (std::make_unique<APF> (juce::ParameterID { "level", 1 }, "Legacy Level",
                                       Range { -20.0f, 10.0f, 0.1f }, 0.0f, "dB"));
 
-    // Advanced control layer.
+    // Shared/Advanced layer.
+    layout.add (std::make_unique<APF> (juce::ParameterID { "master", 1 }, "Master",
+                                      Range { -20.0f, 10.0f, 0.1f }, 0.0f, "dB"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "input", 1 }, "Input Gain",
                                       Range { -20.0f, 20.0f, 0.1f }, 0.0f, "dB"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "threshold", 1 }, "Threshold",
-                                      Range { -40.0f, -15.0f, 0.1f }, -29.0f, "dBFS"));
+                                      Range { -50.0f, -5.0f, 0.1f }, -29.0f, "dBFS"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "ratio", 1 }, "Ratio",
                                       Range { 1.0f, 10.0f, 0.1f }, 4.0f, ":1"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "speed", 1 }, "Speed",
@@ -39,8 +43,67 @@ juce::AudioProcessorValueTreeState::ParameterLayout SteveSledgeCompressorAudioPr
     layout.add (std::make_unique<APF> (juce::ParameterID { "makeup", 1 }, "Makeup",
                                       Range { 0.0f, 20.0f, 0.1f }, 15.0f, "dB"));
     layout.add (std::make_unique<APF> (juce::ParameterID { "ceiling", 1 }, "Limiter Ceiling",
-                                      Range { -20.0f, -0.1f, 0.1f }, -0.1f, "dBFS"));
+                                      Range { -20.0f, -0.1f, 0.1f }, -0.5f, "dBFS"));
+
+    // Three crossovers = four compressor bands.
+    layout.add (std::make_unique<APF> (juce::ParameterID { "xover1", 1 }, "Crossover 1",
+                                      Range { 80.0f, 500.0f, 1.0f, 0.40f }, 250.0f, "Hz"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "xover2", 1 }, "Crossover 2",
+                                      Range { 500.0f, 1500.0f, 1.0f, 0.45f }, 800.0f, "Hz"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "xover3", 1 }, "Crossover 3",
+                                      Range { 1500.0f, 6000.0f, 1.0f, 0.45f }, 2500.0f, "Hz"));
     return layout;
+}
+
+SteveSledgeDspCore::Params SteveSledgeCompressorAudioProcessor::makeSimpleParams() const
+{
+    SteveSledgeDspCore::Params p;
+    const float ratio = apvts.getRawParameterValue ("ratio")->load();
+
+    // COMP 0...10: 0 = essentially no compression on normal guitar levels,
+    // 10 = deep compression. The curve gives more resolution in the useful middle range.
+    const float c = juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue ("comp")->load() * 0.1f);
+    const float shapedComp = std::pow (c, 1.15f);
+    p.thresholdDb = -5.0f - 35.0f * shapedComp;
+    p.ratio = ratio;
+    p.inputGainDb = 0.0f;
+
+    // Automatic musical makeup estimate around a representative guitar level.
+    constexpr float referenceGuitarDb = -14.0f;
+    const float staticGr = referenceGuitarDb > p.thresholdDb
+        ? (referenceGuitarDb - p.thresholdDb) * (1.0f - 1.0f / std::max (p.ratio, 1.0f))
+        : 0.0f;
+    p.makeupDb = juce::jlimit (0.0f, 20.0f, staticGr * 0.70f);
+
+    // ATTACK 0...10: 0 = FAST, 5 = NORMAL, 10 = SLOW.
+    // Internally Speed is inverse to time, therefore the mapping is reversed.
+    const float a = juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue ("attack")->load() * 0.1f);
+    p.speed = std::pow (10.0f, 1.0f - 2.0f * a); // 10x ... 1x ... 0.1x
+
+    // Fixed guitar-oriented crossovers in Simple mode.
+    p.xover1Hz = 250.0f;
+    p.xover2Hz = 800.0f;
+    p.xover3Hz = 2500.0f;
+    return p;
+}
+
+void SteveSledgeCompressorAudioProcessor::setParameterValue (const juce::String& id, float value)
+{
+    if (auto* param = dynamic_cast<juce::RangedAudioParameter*> (apvts.getParameter (id)))
+        param->setValueNotifyingHost (param->convertTo0to1 (value));
+}
+
+void SteveSledgeCompressorAudioProcessor::syncAdvancedFromSimple()
+{
+    const auto p = makeSimpleParams();
+    setParameterValue ("input", p.inputGainDb);
+    setParameterValue ("threshold", p.thresholdDb);
+    setParameterValue ("speed", p.speed);
+    setParameterValue ("makeup", p.makeupDb);
+    setParameterValue ("ceiling", -0.5f);
+    setParameterValue ("xover1", p.xover1Hz);
+    setParameterValue ("xover2", p.xover2Hz);
+    setParameterValue ("xover3", p.xover3Hz);
 }
 
 void SteveSledgeCompressorAudioProcessor::prepareToPlay (double sampleRate, int)
@@ -48,7 +111,6 @@ void SteveSledgeCompressorAudioProcessor::prepareToPlay (double sampleRate, int)
     currentSampleRate = sampleRate;
     for (auto& c : cores)
         c.prepare (sampleRate);
-
     prepareLimiter (sampleRate);
 }
 
@@ -80,45 +142,24 @@ void SteveSledgeCompressorAudioProcessor::processBlock (juce::AudioBuffer<float>
     juce::ScopedNoDenormals noDenormals;
 
     const bool simpleMode = apvts.getRawParameterValue ("simple")->load() >= 0.5f;
-    const float ratio = apvts.getRawParameterValue ("ratio")->load();
-
     SteveSledgeDspCore::Params p;
     float ceilingDb = apvts.getRawParameterValue ("ceiling")->load();
-    float outputGainDb = 0.0f;
 
     if (simpleMode)
     {
-        // COMP macro:
-        // 0...100 maps smoothly from barely-active (-15 dBFS) to deep compression (-40 dBFS).
-        // Makeup is derived from the expected static GR around a representative guitar level.
-        const float c = juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue ("comp")->load() * 0.01f);
-        const float shapedComp = std::pow (c, 1.15f);
-        p.thresholdDb = -15.0f - 25.0f * shapedComp;
-        p.ratio = ratio;
-        p.inputGainDb = 0.0f;
-
-        constexpr float referenceGuitarDb = -14.0f;
-        const float staticGr = referenceGuitarDb > p.thresholdDb
-            ? (referenceGuitarDb - p.thresholdDb) * (1.0f - 1.0f / std::max (p.ratio, 1.0f))
-            : 0.0f;
-        p.makeupDb = juce::jlimit (0.0f, 20.0f, staticGr * 0.70f);
-
-        // ATTACK macro: logarithmic because time/speed perception is multiplicative.
-        // 0 = very slow (0.1x), 50 = reference (1x), 100 = very fast (10x).
-        const float a = juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue ("attack")->load() * 0.01f);
-        p.speed = std::pow (10.0f, 2.0f * a - 1.0f);
-
-        // In Simple mode the limiter is a fixed safety net, not a sound-shaping control.
+        p = makeSimpleParams();
         ceilingDb = -0.5f;
-        outputGainDb = apvts.getRawParameterValue ("level")->load();
     }
     else
     {
         p.inputGainDb = apvts.getRawParameterValue ("input")->load();
         p.thresholdDb = apvts.getRawParameterValue ("threshold")->load();
-        p.ratio       = ratio;
+        p.ratio       = apvts.getRawParameterValue ("ratio")->load();
         p.speed       = apvts.getRawParameterValue ("speed")->load();
         p.makeupDb    = apvts.getRawParameterValue ("makeup")->load();
+        p.xover1Hz    = apvts.getRawParameterValue ("xover1")->load();
+        p.xover2Hz    = apvts.getRawParameterValue ("xover2")->load();
+        p.xover3Hz    = apvts.getRawParameterValue ("xover3")->load();
     }
 
     const int channels = juce::jmin (buffer.getNumChannels(), 2);
@@ -137,11 +178,10 @@ void SteveSledgeCompressorAudioProcessor::processBlock (juce::AudioBuffer<float>
         bandMeterDb[(size_t) band].store (gr, std::memory_order_relaxed);
     }
 
-    // LEVEL sits before the final safety limiter so the output still respects the fixed ceiling.
-    if (simpleMode)
-        applyOutputGain (buffer, outputGainDb);
-
     processLimiter (buffer, ceilingDb);
+
+    // MASTER is deliberately after the limiter and never changes compression/limiting behaviour.
+    applyOutputGain (buffer, apvts.getRawParameterValue ("master")->load());
 }
 
 void SteveSledgeCompressorAudioProcessor::applyOutputGain (juce::AudioBuffer<float>& buffer, float gainDb)
