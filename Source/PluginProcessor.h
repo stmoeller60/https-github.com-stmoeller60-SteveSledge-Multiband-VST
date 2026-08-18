@@ -37,6 +37,7 @@ public:
 
     float getBandMeterDb (int band) const;
     float getLimiterMeterDb() const;
+    float getOutputPeakDb();
 
     // Called by the editor when leaving Simple mode so Advanced controls show
     // the exact internal values that were active in Simple mode.
@@ -66,6 +67,7 @@ private:
 
     std::array<std::atomic<float>, 4> bandMeterDb { 0.0f, 0.0f, 0.0f, 0.0f };
     std::atomic<float> limiterMeterDb { 0.0f };
+    std::atomic<float> outputPeakLinear { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SteveSledgeCompressorAudioProcessor)
 };
