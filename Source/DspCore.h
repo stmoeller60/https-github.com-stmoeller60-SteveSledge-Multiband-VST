@@ -14,13 +14,16 @@ public:
         float ratio = 4.0f;
         float speed = 1.0f;
         float makeupDb = 15.0f;
+        float xover1Hz = 250.0f;
+        float xover2Hz = 800.0f;
+        float xover3Hz = 2500.0f;
     };
 
     void prepare (double newSampleRate)
     {
         fs = newSampleRate;
         reset();
-        splitter.prepare (fs);
+        splitter.prepare (fs, 250.0f, 800.0f, 2500.0f);
     }
 
     void reset()
@@ -43,6 +46,8 @@ public:
 
         static constexpr std::array<float, 4> att0 { 2.5f, 2.975f, 1.275f, 0.425f };
         static constexpr std::array<float, 4> rel0 { 10.0f, 11.9f, 5.1f, 1.7f };
+
+        splitter.setCrossovers (p.xover1Hz, p.xover2Hz, p.xover3Hz);
 
         const float inputGain = juce::Decibels::decibelsToGain (p.inputGainDb);
         const float drive = juce::Decibels::decibelsToGain (driveDb);
@@ -151,6 +156,15 @@ private:
             sampleRate = sr; cutoff = fc; high = isHigh;
             update(); reset();
         }
+        void setCutoff (float fc)
+        {
+            fc = juce::jlimit (20.0f, (float) sampleRate * 0.45f, fc);
+            if (std::abs (fc - cutoff) > 0.01f)
+            {
+                cutoff = fc;
+                update();
+            }
+        }
         void update()
         {
             auto c = high ? juce::dsp::IIR::Coefficients<float>::makeHighPass (sampleRate, cutoff, 0.70710678118f)
@@ -166,37 +180,65 @@ private:
     {
         LR4 lp, hp;
         void prepare (double sr, float fc) { lp.prepare (sr, fc, false); hp.prepare (sr, fc, true); }
+        void setCutoff (float fc) { lp.setCutoff (fc); hp.setCutoff (fc); }
         void reset() { lp.reset(); hp.reset(); }
         float process (float x) { return lp.process (x) + hp.process (x); }
     };
 
     struct Splitter
     {
-        LR4 lp800, hp800;
-        LR4 b1lp250, b2hp250, b3lp2500, b4hp2500;
-        PhasePair b1phase2500, b2phase2500, b3phase250, b4phase250;
+        LR4 lpMid, hpMid;
+        LR4 b1lpLow, b2hpLow, b3lpHigh, b4hpHigh;
+        PhasePair b1phaseHigh, b2phaseHigh, b3phaseLow, b4phaseLow;
+        float lowFc = 250.0f, midFc = 800.0f, highFc = 2500.0f;
 
-        void prepare (double sr)
+        void prepare (double sr, float low, float mid, float high)
         {
-            lp800.prepare (sr, 800.0f, false); hp800.prepare (sr, 800.0f, true);
-            b1lp250.prepare (sr, 250.0f, false); b2hp250.prepare (sr, 250.0f, true);
-            b3lp2500.prepare (sr, 2500.0f, false); b4hp2500.prepare (sr, 2500.0f, true);
-            b1phase2500.prepare (sr, 2500.0f); b2phase2500.prepare (sr, 2500.0f);
-            b3phase250.prepare (sr, 250.0f); b4phase250.prepare (sr, 250.0f);
+            lowFc = low; midFc = mid; highFc = high;
+            lpMid.prepare (sr, midFc, false); hpMid.prepare (sr, midFc, true);
+            b1lpLow.prepare (sr, lowFc, false); b2hpLow.prepare (sr, lowFc, true);
+            b3lpHigh.prepare (sr, highFc, false); b4hpHigh.prepare (sr, highFc, true);
+            b1phaseHigh.prepare (sr, highFc); b2phaseHigh.prepare (sr, highFc);
+            b3phaseLow.prepare (sr, lowFc); b4phaseLow.prepare (sr, lowFc);
+        }
+        void setCrossovers (float low, float mid, float high)
+        {
+            // Keep the three crossovers ordered even during automation.
+            low = juce::jlimit (60.0f, 700.0f, low);
+            mid = juce::jlimit (low + 40.0f, 1800.0f, mid);
+            high = juce::jlimit (mid + 100.0f, 7000.0f, high);
+
+            if (std::abs (low - lowFc) > 0.01f)
+            {
+                lowFc = low;
+                b1lpLow.setCutoff (lowFc); b2hpLow.setCutoff (lowFc);
+                b3phaseLow.setCutoff (lowFc); b4phaseLow.setCutoff (lowFc);
+            }
+            if (std::abs (mid - midFc) > 0.01f)
+            {
+                midFc = mid;
+                lpMid.setCutoff (midFc); hpMid.setCutoff (midFc);
+            }
+            if (std::abs (high - highFc) > 0.01f)
+            {
+                highFc = high;
+                b3lpHigh.setCutoff (highFc); b4hpHigh.setCutoff (highFc);
+                b1phaseHigh.setCutoff (highFc); b2phaseHigh.setCutoff (highFc);
+            }
         }
         void reset()
         {
-            lp800.reset(); hp800.reset(); b1lp250.reset(); b2hp250.reset(); b3lp2500.reset(); b4hp2500.reset();
-            b1phase2500.reset(); b2phase2500.reset(); b3phase250.reset(); b4phase250.reset();
+            lpMid.reset(); hpMid.reset(); b1lpLow.reset(); b2hpLow.reset(); b3lpHigh.reset(); b4hpHigh.reset();
+            b1phaseHigh.reset(); b2phaseHigh.reset(); b3phaseLow.reset(); b4phaseLow.reset();
         }
         void process (float x, std::array<float,4>& out)
         {
-            const float lo = lp800.process (x);
-            const float hi = hp800.process (x);
-            out[0] = b1phase2500.process (b1lp250.process (lo));
-            out[1] = b2phase2500.process (b2hp250.process (lo));
-            out[2] = b3phase250.process (b3lp2500.process (hi));
-            out[3] = b4phase250.process (b4hp2500.process (hi));
+            const float lo = lpMid.process (x);
+            const float hi = hpMid.process (x);
+            out[0] = b1phaseHigh.process (b1lpLow.process (lo));
+            out[1] = b2phaseHigh.process (b2hpLow.process (lo));
+            out[2] = b3phaseLow.process (b3lpHigh.process (hi));
+            out[3] = b4phaseLow.process (b4hpHigh.process (hi));
         }
     };
 
