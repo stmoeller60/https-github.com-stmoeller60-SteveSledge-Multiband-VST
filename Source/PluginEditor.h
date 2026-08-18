@@ -24,20 +24,28 @@ private:
 
     SteveSledgeCompressorAudioProcessor& processor;
 
-    juce::ToggleButton simpleModeButton { "Simple" };
+    juce::ToggleButton simpleModeButton { "SIMPLE" };
 
-    // Simple mode controls.
-    juce::Slider compSlider, attackSlider, levelSlider;
-    juce::Label compLabel, attackLabel, levelLabel;
+    // Simple musical controls.
+    juce::Slider compSlider, attackSlider;
+    juce::Label compLabel, attackLabel;
 
-    // Shared + Advanced mode controls.
-    juce::Slider inputSlider, thresholdSlider, ratioSlider, speedSlider, makeupSlider, ceilingSlider;
-    juce::Label inputLabel, thresholdLabel, ratioLabel, speedLabel, makeupLabel, ceilingLabel;
+    // Shared controls.
+    juce::Slider ratioSlider, masterSlider;
+    juce::Label ratioLabel, masterLabel;
+
+    // Advanced controls.
+    juce::Slider inputSlider, thresholdSlider, speedSlider, makeupSlider, ceilingSlider;
+    juce::Slider xover1Slider, xover2Slider, xover3Slider;
+    juce::Label inputLabel, thresholdLabel, speedLabel, makeupLabel, ceilingLabel;
+    juce::Label xover1Label, xover2Label, xover3Label;
 
     std::unique_ptr<ButtonAttachment> simpleAttachment;
-    std::unique_ptr<SliderAttachment> compAttachment, attackAttachment, levelAttachment,
-                                      inputAttachment, thresholdAttachment, ratioAttachment,
-                                      speedAttachment, makeupAttachment, ceilingAttachment;
+    std::unique_ptr<SliderAttachment> compAttachment, attackAttachment,
+                                      ratioAttachment, masterAttachment,
+                                      inputAttachment, thresholdAttachment,
+                                      speedAttachment, makeupAttachment, ceilingAttachment,
+                                      xover1Attachment, xover2Attachment, xover3Attachment;
 
     std::array<float, 5> meterDb { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
     bool lastSimpleMode = false;
