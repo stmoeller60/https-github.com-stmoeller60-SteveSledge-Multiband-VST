@@ -23,18 +23,12 @@ private:
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
     SteveSledgeCompressorAudioProcessor& processor;
-
     juce::ToggleButton simpleModeButton { "SIMPLE" };
 
-    // Simple musical controls.
     juce::Slider compSlider, attackSlider;
     juce::Label compLabel, attackLabel;
-
-    // Shared controls.
     juce::Slider ratioSlider, masterSlider;
     juce::Label ratioLabel, masterLabel;
-
-    // Advanced controls.
     juce::Slider inputSlider, thresholdSlider, speedSlider, makeupSlider, ceilingSlider;
     juce::Slider xover1Slider, xover2Slider, xover3Slider;
     juce::Label inputLabel, thresholdLabel, speedLabel, makeupLabel, ceilingLabel;
@@ -48,6 +42,9 @@ private:
                                       xover1Attachment, xover2Attachment, xover3Attachment;
 
     std::array<float, 5> meterDb { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    static constexpr int historySize = 120; // 4 seconds at the 30 Hz GUI timer rate
+    std::array<std::array<float, historySize>, 5> grHistory {};
+    int historyWritePos = 0;
     float outputPeakDb = -100.0f;
     bool lastSimpleMode = false;
 
