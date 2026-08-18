@@ -48,6 +48,7 @@ private:
                                       xover1Attachment, xover2Attachment, xover3Attachment;
 
     std::array<float, 5> meterDb { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    float outputPeakDb = -100.0f;
     bool lastSimpleMode = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SteveSledgeCompressorAudioProcessorEditor)
