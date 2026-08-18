@@ -112,6 +112,7 @@ void SteveSledgeCompressorAudioProcessor::prepareToPlay (double sampleRate, int)
     for (auto& c : cores)
         c.prepare (sampleRate);
     prepareLimiter (sampleRate);
+    outputPeakLinear.store (0.0f, std::memory_order_relaxed);
 }
 
 void SteveSledgeCompressorAudioProcessor::prepareLimiter (double sampleRate)
@@ -182,6 +183,23 @@ void SteveSledgeCompressorAudioProcessor::processBlock (juce::AudioBuffer<float>
 
     // MASTER is deliberately after the limiter and never changes compression/limiting behaviour.
     applyOutputGain (buffer, apvts.getRawParameterValue ("master")->load());
+
+    // Diagnostic meter: capture the highest sample peak after MASTER until the UI reads it.
+    float blockPeak = 0.0f;
+    for (int ch = 0; ch < channels; ++ch)
+    {
+        const auto* data = buffer.getReadPointer (ch);
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            blockPeak = std::max (blockPeak, std::abs (data[i]));
+    }
+
+    float stored = outputPeakLinear.load (std::memory_order_relaxed);
+    while (blockPeak > stored
+           && ! outputPeakLinear.compare_exchange_weak (stored, blockPeak,
+                                                        std::memory_order_relaxed,
+                                                        std::memory_order_relaxed))
+    {
+    }
 }
 
 void SteveSledgeCompressorAudioProcessor::applyOutputGain (juce::AudioBuffer<float>& buffer, float gainDb)
@@ -255,6 +273,12 @@ float SteveSledgeCompressorAudioProcessor::getBandMeterDb (int band) const
 float SteveSledgeCompressorAudioProcessor::getLimiterMeterDb() const
 {
     return limiterMeterDb.load (std::memory_order_relaxed);
+}
+
+float SteveSledgeCompressorAudioProcessor::getOutputPeakDb()
+{
+    const float peak = outputPeakLinear.exchange (0.0f, std::memory_order_relaxed);
+    return juce::Decibels::gainToDecibels (std::max (peak, 1.0e-5f), -100.0f);
 }
 
 juce::AudioProcessorEditor* SteveSledgeCompressorAudioProcessor::createEditor()
