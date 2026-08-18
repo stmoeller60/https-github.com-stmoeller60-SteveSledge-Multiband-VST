@@ -18,40 +18,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout SteveSledgeCompressorAudioPr
     using Range = juce::NormalisableRange<float>;
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    // Musical/Simple layer.
     layout.add (std::make_unique<APB> (juce::ParameterID { "simple", 1 }, "Simple Mode", false));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "comp", 1 }, "Comp",
-                                      Range { 0.0f, 10.0f, 0.1f }, 5.0f, ""));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "attack", 1 }, "Attack",
-                                      Range { 0.0f, 10.0f, 0.1f }, 5.0f, ""));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "comp", 1 }, "Comp", Range { 0.0f, 10.0f, 0.1f }, 5.0f, ""));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "attack", 1 }, "Attack", Range { 0.0f, 10.0f, 0.1f }, 5.0f, ""));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "level", 1 }, "Legacy Level", Range { -20.0f, 10.0f, 0.1f }, 0.0f, "dB"));
 
-    // Kept for backwards-compatible state loading; no longer shown or used.
-    layout.add (std::make_unique<APF> (juce::ParameterID { "level", 1 }, "Legacy Level",
-                                      Range { -20.0f, 10.0f, 0.1f }, 0.0f, "dB"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "master", 1 }, "Master", Range { -20.0f, 10.0f, 0.1f }, 0.0f, "dB"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "input", 1 }, "Input Gain", Range { -20.0f, 20.0f, 0.1f }, 0.0f, "dB"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "threshold", 1 }, "Threshold", Range { -50.0f, -5.0f, 0.1f }, -29.0f, "dBFS"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "ratio", 1 }, "Ratio", Range { 1.0f, 10.0f, 0.1f }, 4.0f, ":1"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "speed", 1 }, "Speed", Range { 0.1f, 10.0f, 0.01f }, 1.0f, "x"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "makeup", 1 }, "Makeup", Range { 0.0f, 20.0f, 0.1f }, 15.0f, "dB"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "ceiling", 1 }, "Limiter Ceiling", Range { -20.0f, -0.1f, 0.1f }, -0.5f, "dBFS"));
 
-    // Shared/Advanced layer.
-    layout.add (std::make_unique<APF> (juce::ParameterID { "master", 1 }, "Master",
-                                      Range { -20.0f, 10.0f, 0.1f }, 0.0f, "dB"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "input", 1 }, "Input Gain",
-                                      Range { -20.0f, 20.0f, 0.1f }, 0.0f, "dB"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "threshold", 1 }, "Threshold",
-                                      Range { -50.0f, -5.0f, 0.1f }, -29.0f, "dBFS"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "ratio", 1 }, "Ratio",
-                                      Range { 1.0f, 10.0f, 0.1f }, 4.0f, ":1"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "speed", 1 }, "Speed",
-                                      Range { 0.1f, 10.0f, 0.01f }, 1.0f, "x"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "makeup", 1 }, "Makeup",
-                                      Range { 0.0f, 20.0f, 0.1f }, 15.0f, "dB"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "ceiling", 1 }, "Limiter Ceiling",
-                                      Range { -20.0f, -0.1f, 0.1f }, -0.5f, "dBFS"));
-
-    // Three crossovers = four compressor bands.
-    layout.add (std::make_unique<APF> (juce::ParameterID { "xover1", 1 }, "Crossover 1",
-                                      Range { 80.0f, 500.0f, 1.0f, 0.40f }, 250.0f, "Hz"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "xover2", 1 }, "Crossover 2",
-                                      Range { 500.0f, 1500.0f, 1.0f, 0.45f }, 800.0f, "Hz"));
-    layout.add (std::make_unique<APF> (juce::ParameterID { "xover3", 1 }, "Crossover 3",
-                                      Range { 1500.0f, 6000.0f, 1.0f, 0.45f }, 2500.0f, "Hz"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "xover1", 1 }, "Crossover 1", Range { 80.0f, 500.0f, 1.0f, 0.40f }, 250.0f, "Hz"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "xover2", 1 }, "Crossover 2", Range { 500.0f, 1500.0f, 1.0f, 0.45f }, 800.0f, "Hz"));
+    layout.add (std::make_unique<APF> (juce::ParameterID { "xover3", 1 }, "Crossover 3", Range { 1500.0f, 6000.0f, 1.0f, 0.45f }, 2500.0f, "Hz"));
     return layout;
 }
 
@@ -59,28 +41,20 @@ SteveSledgeDspCore::Params SteveSledgeCompressorAudioProcessor::makeSimpleParams
 {
     SteveSledgeDspCore::Params p;
     const float ratio = apvts.getRawParameterValue ("ratio")->load();
-
-    // COMP 0...10: 0 = essentially no compression on normal guitar levels,
-    // 10 = deep compression. The curve gives more resolution in the useful middle range.
     const float c = juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue ("comp")->load() * 0.1f);
     const float shapedComp = std::pow (c, 1.15f);
     p.thresholdDb = -5.0f - 35.0f * shapedComp;
     p.ratio = ratio;
     p.inputGainDb = 0.0f;
 
-    // Automatic musical makeup estimate around a representative guitar level.
     constexpr float referenceGuitarDb = -14.0f;
     const float staticGr = referenceGuitarDb > p.thresholdDb
         ? (referenceGuitarDb - p.thresholdDb) * (1.0f - 1.0f / std::max (p.ratio, 1.0f))
         : 0.0f;
     p.makeupDb = juce::jlimit (0.0f, 20.0f, staticGr * 0.70f);
 
-    // ATTACK 0...10: 0 = FAST, 5 = NORMAL, 10 = SLOW.
-    // Internally Speed is inverse to time, therefore the mapping is reversed.
     const float a = juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue ("attack")->load() * 0.1f);
-    p.speed = std::pow (10.0f, 1.0f - 2.0f * a); // 10x ... 1x ... 0.1x
-
-    // Fixed guitar-oriented crossovers in Simple mode.
+    p.speed = std::pow (10.0f, 1.0f - 2.0f * a);
     p.xover1Hz = 250.0f;
     p.xover2Hz = 800.0f;
     p.xover3Hz = 2500.0f;
@@ -109,8 +83,7 @@ void SteveSledgeCompressorAudioProcessor::syncAdvancedFromSimple()
 void SteveSledgeCompressorAudioProcessor::prepareToPlay (double sampleRate, int)
 {
     currentSampleRate = sampleRate;
-    for (auto& c : cores)
-        c.prepare (sampleRate);
+    core.prepare (sampleRate);
     prepareLimiter (sampleRate);
     outputPeakLinear.store (0.0f, std::memory_order_relaxed);
 }
@@ -163,28 +136,25 @@ void SteveSledgeCompressorAudioProcessor::processBlock (juce::AudioBuffer<float>
         p.xover3Hz    = apvts.getRawParameterValue ("xover3")->load();
     }
 
-    const int channels = juce::jmin (buffer.getNumChannels(), 2);
-    for (int ch = 0; ch < channels; ++ch)
+    const int channels = juce::jlimit (1, 2, buffer.getNumChannels());
+    auto* left = buffer.getWritePointer (0);
+    auto* right = channels > 1 ? buffer.getWritePointer (1) : nullptr;
+
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
     {
-        auto* data = buffer.getWritePointer (ch);
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            data[i] = cores[(size_t) ch].processSample (data[i], p);
+        float l = left[i];
+        float r = channels > 1 ? right[i] : 0.0f;
+        core.processFrame (l, r, channels, p);
+        left[i] = l;
+        if (channels > 1) right[i] = r;
     }
 
     for (int band = 0; band < 4; ++band)
-    {
-        float gr = 0.0f;
-        for (int ch = 0; ch < channels; ++ch)
-            gr = std::max (gr, cores[(size_t) ch].getBandGainReductionDb ((size_t) band));
-        bandMeterDb[(size_t) band].store (gr, std::memory_order_relaxed);
-    }
+        bandMeterDb[(size_t) band].store (core.getBandGainReductionDb ((size_t) band), std::memory_order_relaxed);
 
     processLimiter (buffer, ceilingDb);
-
-    // MASTER is deliberately after the limiter and never changes compression/limiting behaviour.
     applyOutputGain (buffer, apvts.getRawParameterValue ("master")->load());
 
-    // Diagnostic meter: capture the highest sample peak after MASTER until the UI reads it.
     float blockPeak = 0.0f;
     for (int ch = 0; ch < channels; ++ch)
     {
@@ -228,9 +198,7 @@ void SteveSledgeCompressorAudioProcessor::processLimiter (juce::AudioBuffer<floa
         }
 
         const int readPos = (limiterPos + 1) % limiterBufferSize;
-        const float requiredGain = peak > ceiling
-            ? ceiling / std::max (peak, 1.0e-20f)
-            : 1.0f;
+        const float requiredGain = peak > ceiling ? ceiling / std::max (peak, 1.0e-20f) : 1.0f;
 
         if (requiredGain < 1.0f)
         {
@@ -260,8 +228,7 @@ void SteveSledgeCompressorAudioProcessor::processLimiter (juce::AudioBuffer<floa
         limiterPos = (limiterPos + 1) % limiterBufferSize;
     }
 
-    limiterMeterDb.store (-juce::Decibels::gainToDecibels (std::max (limiterGain, 1.0e-9f)),
-                          std::memory_order_relaxed);
+    limiterMeterDb.store (-juce::Decibels::gainToDecibels (std::max (limiterGain, 1.0e-9f)), std::memory_order_relaxed);
 }
 
 float SteveSledgeCompressorAudioProcessor::getBandMeterDb (int band) const
