@@ -45,7 +45,7 @@ public:
         constexpr float balMs = 20.0f;
 
         static constexpr std::array<float, 4> att0 { 2.5f, 2.975f, 1.275f, 0.425f };
-        static constexpr std::array<float, 4> rel0 { 10.0f, 11.9f, 5.1f, 1.7f };
+        static constexpr std::array<float, 4> rel0 { 10.0f, 11.9f, 5.1f, 3.0f };
 
         splitter.setCrossovers (p.xover1Hz, p.xover2Hz, p.xover3Hz);
 
