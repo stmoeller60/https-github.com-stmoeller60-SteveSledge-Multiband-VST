@@ -39,8 +39,6 @@ public:
     float getLimiterMeterDb() const;
     float getOutputPeakDb();
 
-    // Called by the editor when leaving Simple mode so Advanced controls show
-    // the exact internal values that were active in Simple mode.
     void syncAdvancedFromSimple();
 
     juce::AudioProcessorValueTreeState apvts;
@@ -53,7 +51,7 @@ private:
     void setParameterValue (const juce::String& id, float value);
     SteveSledgeDspCore::Params makeSimpleParams() const;
 
-    std::array<SteveSledgeDspCore, 2> cores;
+    SteveSledgeDspCore core;
 
     static constexpr double lookaheadMs = 5.0;
     static constexpr double limiterReleaseMs = 50.0;
